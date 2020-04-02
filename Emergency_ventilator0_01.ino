@@ -10,11 +10,9 @@
  */
 // Include Libraries
 #include "Arduino.h"
-#include "Buzzer.h"
-#include "LiquidCrystal_PCF8574.h"
-#include "Potentiometer.h"
-#include "Button.h"
 #include <Servo.h>
+
+
 // Pin Definitions
 #define BUZZER_PIN_SIG  4
 
@@ -49,15 +47,8 @@ int I_E_POT_value = 0;  // variable to store the value coming from the potentiom
 int Threshold_POT_value = 0;  // variable to store the value coming from the potentiometer Threshold_POT
 int Angle_POT_value = 0;  // variable to store the value coming from the potentiometer Angle_POT
 
-
-// object initialization
-
-Potentiometer BPM_POT = Potentiometer(BPM_POT_SIG); //a Potentiometer at analog in 
-Potentiometer Tidal_POT = Potentiometer(Tidal_POT_SIG); //a Potentiometer at analog in 
-Potentiometer I_E_POT = Potentiometer(I_E_POT_SIG); //a Potentiometer at analog in 
-Potentiometer Threshold_POT = Potentiometer(Threshold_POT_SIG); //a Potentiometer at analog in 
-Potentiometer Angle_POT = Potentiometer(Angle_POT_SIG); //a Potentiometer at analog in 
-
+unsigned long startTime;  //
+unsigned long currentTime;
 
 // variable for interrupt? 
 const byte ledPin = 6;
@@ -112,6 +103,7 @@ float Temp_Sensor(){
  * Nominal Transfer Value: VOUT = VS x (0.009 x P - 0.095)
    ± (Pressure Error x Temp. Factor x 0.009 x VS)
    VS = 5.0 ± 0.25 Vdc
+    20 cmH20 = 1961.3300000000002 pascal  
  */
 
 float Pressure_Sensor(){
@@ -123,7 +115,6 @@ float Pressure_Sensor(){
   return temp_pressure;
 }
 
-
 int readPotentiometer() {
    static int temp_BPM_POT_value;
    static int temp_Tidal_POT_value;
@@ -134,20 +125,20 @@ int readPotentiometer() {
 // use temp  values intead , use has to press button to validate the change
 // value to the global data for safety mesure 
 // need to add the value change on LCD to
-   temp_BPM_POT_value=  BPM_POT.getValue();
-   temp_BPM_POT_value= map(temp_BPM_POT_value,0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
+
+   temp_BPM_POT_value= map( analogRead(BPM_POT_SIG),0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
    
-   temp_Tidal_POT_value = Tidal_POT.getValue();
-   temp_Tidal_POT_value = map( temp_Tidal_POT_value,0,1023,0,100); // tidla value form 0% to 100%
+
+   temp_Tidal_POT_value = map(  analogRead(Tidal_POT_SIG),0,1023,0,100); // tidla value form 0% to 100%
     
-   temp_I_E_POT_value = I_E_POT.getValue();
-   temp_I_E_POT_value = map(temp_I_E_POT_value,0,1023,2,4); // I_E ratio from 1/2 to 1/4
+
+   temp_I_E_POT_value = map( analogRead(I_E_POT_SIG),0,1023,2,4); // I_E ratio from 1/2 to 1/4
    
-   temp_Threshold_POT_value = Threshold_POT.getValue();
-   temp_Threshold_POT_value = map( temp_Threshold_POT_value,0,1023,0,100); // plateau thresold value
+
+   temp_Threshold_POT_value = map(  analogRead(Threshold_POT_SIG),0,1023,0,100); // plateau thresold value
    
-   temp_Angle_POT_value =  Angle_POT.getValue();
-   temp_Angle_POT_value = map( temp_Angle_POT_value,0,1023,0,180); // angle of servo desired.
+  
+   temp_Angle_POT_value = map(  analogRead(Angle_POT_SIG),0,1023,0,180); // angle of servo desired.
 
    if (Button_read()!= 1)
    {
@@ -194,20 +185,20 @@ void setup() {
   pinMode(LEDRGB_PIN_DIN,OUTPUT); // set led -pin 12 as an output
   
   Servo1.attach(SERVO_1_SIG,DEG_0,DEG_180);  // attaches the servo on pin 9 to the servo object degree from 0 to 180
-  Servo1.writeMicroseconds(1000);  // set servo to starting point
+  Servo1.write(DEG_0);  // set servo to starting point
   Servo2.attach(SERVO_2_SIG,DEG_0,DEG_180);  // attaches the servo on pin 10 to the servo object degree from 0 to 180
-  Servo2.writeMicroseconds(1000);  // set servo to starting point
+  Servo2.write(DEG_0);  // set servo to starting point
 // interrupt for pressure sensor 
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING ); // interupt for pressure sensor 
-
+  startTime = millis();
 }
 
 
 // TO DO timer process doesn't work at all at the moment , 
 // just a concepct to get the idea
 void loop() {
-float PERIOD_T ;
+ float PERIOD_T ;
  unsigned long cycle_breathe_threshold;
  unsigned long time_T;
  int ret; 
@@ -241,9 +232,10 @@ float PERIOD_T ;
    do{
        // read pressudre 
        // read pot
-       ret =readPotentiometer();
+       ret = readPotentiometer();
+       ret = Pressure_Sensor();
        cycle_breathe = millis();
-   } while ( cycle_breathe <= (time_T - cycle_breathe_threshold) );
+   } while ( ((cycle_breathe - time_T) <= (cycle_breathe_threshold))|| (ret >=2) ); // 2 is for max pressure sensor 
 
    current_state = PLATEAU;
  }
