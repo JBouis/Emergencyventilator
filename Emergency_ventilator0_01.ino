@@ -29,8 +29,6 @@
 #define Threshold_POT_SIG A3
 #define Angle_POT_SIG A4
 
-
-
 #define TEMPERATURE_SENSOR A5
 
 #define PRESSURE_SENSOR A6
@@ -56,6 +54,14 @@ const byte interruptPin = 3;
 volatile byte state = LOW;
 //
 
+//******************************************
+// variable for auto or manual mode
+// Variables will change:
+long previousMillis = 0;        // will store pressed timing
+long interval = 3000;           // interval for on time (milliseconds)
+int currState;
+int prevState = HIGH; // Assumes LOW means pressed
+//*******************************************
 
 Servo Servo1;  // create servo object to control a servo
 Servo Servo2;  // create servo object to control a servo
@@ -84,16 +90,46 @@ bool Button_read( )
 
 }
 
+
+/*
+ * To do  
+ *  MANUAL OR AUTO MODE
+ */
+
+bool Get_mode(){
+   
+   bool mode = 0;
+   currState = digitalRead(ACCEPT_BUTTON);
+   if(currState == HIGH)
+   {
+     return 0;
+   }
+   
+   prevState = currState;
+   
+   unsigned long currentMillis = millis();
+
+   if(currentMillis - previousMillis > interval) {
+    previousMillis = currentMillis;
+    mode = 1;
+   }
+  
+   return mode;
+}
+
+
 /*
  * not recommanded ( yet)but can be use to automatically
  * get the BPM by getting the time delay between a
  * low temperature ( breath in) and the high temperature
  * ( breathe out)
+ * temp = ADCval * AREF / 1024.0 * 100 - 50
+ * here AREF is 5V
  */
 float Temp_Sensor(){
   static float temp_val  ;
    temp_val = analogRead(TEMPERATURE_SENSOR) * 5 / 1024.0 * 100 -50 ;
-  // ADCval * AREF / 1024.0 * 100 - 50
+  
 
   return temp_val ;
 }
@@ -104,40 +140,34 @@ float Temp_Sensor(){
    ± (Pressure Error x Temp. Factor x 0.009 x VS)
    VS = 5.0 ± 0.25 Vdc
     20 cmH20 = 1961.3300000000002 pascal  
+    from the datasheet range is from 0 kPa to 12kPa
  */
 
 float Pressure_Sensor(){
+  
   static float temp_pressure ;
- // VOUT = VS x (0.009 x P - 0.095)
- // from the datashee range is from 0 kPa to 12kPa
- temp_pressure =map( analogRead(PRESSURE_SENSOR),0,1023,0,120);  // value in kPa
+  
+  temp_pressure =map( analogRead(PRESSURE_SENSOR),0,1023,0,120);  // value in kPa
  
   return temp_pressure;
 }
 
 int readPotentiometer() {
+  
    static int temp_BPM_POT_value;
    static int temp_Tidal_POT_value;
    static int temp_I_E_POT_value;
    static int temp_Threshold_POT_value;
    static int temp_Angle_POT_value;
-// TO DO 
-// use temp  values intead , use has to press button to validate the change
-// value to the global data for safety mesure 
-// need to add the value change on LCD to
-
-   temp_BPM_POT_value= map( analogRead(BPM_POT_SIG),0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
    
-
+   temp_BPM_POT_value= map( analogRead(BPM_POT_SIG),0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
+  
    temp_Tidal_POT_value = map(  analogRead(Tidal_POT_SIG),0,1023,0,100); // tidla value form 0% to 100%
     
-
    temp_I_E_POT_value = map( analogRead(I_E_POT_SIG),0,1023,2,4); // I_E ratio from 1/2 to 1/4
    
-
    temp_Threshold_POT_value = map(  analogRead(Threshold_POT_SIG),0,1023,0,100); // plateau thresold value
-   
-  
+     
    temp_Angle_POT_value = map(  analogRead(Angle_POT_SIG),0,1023,0,180); // angle of servo desired.
 
    if (Button_read()!= 1)
@@ -151,11 +181,10 @@ int readPotentiometer() {
      
    }
   
-
-
    return 0 ;
   
 }
+
 /*
  * blink led
  */
@@ -179,15 +208,19 @@ void BUZZER (void){
 }
 
 void setup() {
-  // put your setup code here, to run once:
-//  pinMode(Maintenance, INPUT_PULLUP);
+
   pinMode(BUZZER_PIN_SIG, OUTPUT);   // Set buzzer - pin 4 as an output
   pinMode(LEDRGB_PIN_DIN,OUTPUT); // set led -pin 12 as an output
+  
+  pinMode(ACCEPT_BUTTON,INPUT);
+  digitalWrite(ACCEPT_BUTTON, HIGH);
   
   Servo1.attach(SERVO_1_SIG,DEG_0,DEG_180);  // attaches the servo on pin 9 to the servo object degree from 0 to 180
   Servo1.write(DEG_0);  // set servo to starting point
   Servo2.attach(SERVO_2_SIG,DEG_0,DEG_180);  // attaches the servo on pin 10 to the servo object degree from 0 to 180
   Servo2.write(DEG_0);  // set servo to starting point
+
+  
 // interrupt for pressure sensor 
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING ); // interupt for pressure sensor 
@@ -198,12 +231,16 @@ void setup() {
 // TO DO timer process doesn't work at all at the moment , 
 // just a concepct to get the idea
 void loop() {
+
  float PERIOD_T ;
  unsigned long cycle_breathe_threshold;
  unsigned long time_T;
  int ret; 
  int current_pos_servo_1 = Servo1.read();
  int current_pos_servo_2 = Servo2.read();
+ int mode = 0 ; // 0 means manual 
+ 
+ mode =Get_mode();
  
 //if (MANUAL_MODE == TRUE ) {
  if ( (current_pos_servo_1 != DEG_0) || (current_pos_servo_2 !=DEG_0))
