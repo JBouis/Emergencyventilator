@@ -98,11 +98,11 @@ bool Button_read( )
 
 bool Get_mode(){
    
-   bool mode = 0;
+   bool mode = false;
    currState = digitalRead(ACCEPT_BUTTON);
    if(currState == HIGH)
    {
-     return 0;
+     return false;
    }
    
    prevState = currState;
@@ -111,7 +111,7 @@ bool Get_mode(){
 
    if(currentMillis - previousMillis > interval) {
     previousMillis = currentMillis;
-    mode = 1;
+    mode = true;
    }
   
    return mode;
@@ -170,7 +170,7 @@ int readPotentiometer() {
      
    temp_Angle_POT_value = map(  analogRead(Angle_POT_SIG),0,1023,0,180); // angle of servo desired.
 
-   if (Button_read()!= 1)
+   if (Button_read()!= true)
    {
      BPM_POT_value = temp_BPM_POT_value;
      Tidal_POT_value = temp_Tidal_POT_value;
@@ -238,14 +238,14 @@ void loop() {
  int ret; 
  int current_pos_servo_1 = Servo1.read();
  int current_pos_servo_2 = Servo2.read();
- int mode = 0 ; // 0 means manual 
+ bool auto_mode = false ; // false means manual 
  
- mode =Get_mode();
+ //auto_mode =Get_mode(); // TO DO a more reliable get mode ( auto or manual)
  
 //if (MANUAL_MODE == TRUE ) {
  if ( (current_pos_servo_1 != DEG_0) || (current_pos_servo_2 !=DEG_0))
  {
-   while(Button_read()!=1)
+   while(Button_read()!=true)
     {
       BUZZER();
       BLINK_LED();
@@ -272,14 +272,14 @@ void loop() {
        ret = readPotentiometer();
        ret = Pressure_Sensor();
        cycle_breathe = millis();
-   } while ( ((cycle_breathe - time_T) <= (cycle_breathe_threshold))|| (ret >=2) ); // 2 is for max pressure sensor 
+   } while ( ((cycle_breathe - time_T) <= (cycle_breathe_threshold))|| (ret >=2) ); // 2 is for max pressure sensor  max is 1.9kPA
 
    current_state = PLATEAU;
  }
  else
  {  
  
-    while(Button_read()!=1)
+    while(Button_read()!=true)
     {
       BUZZER();
       BLINK_LED();
@@ -300,7 +300,7 @@ void loop() {
 
        if ( (current_pos_servo_1 != Angle_POT_value) || (current_pos_servo_2 !=Angle_POT_value))
        {
-         while(Button_read()!=1)
+         while(Button_read()!=true)
           {
             BUZZER();
             BLINK_LED();
@@ -313,7 +313,7 @@ void loop() {
   else
  {  
  
-    while(Button_read()!=1)
+    while(Button_read()!=true)
     {
       BUZZER();
       BLINK_LED();
@@ -339,18 +339,12 @@ void loop() {
  else
  {  
  
-    while(Button_read()!=1)
+    while(Button_read()!=true)
     {
       BUZZER();
       BLINK_LED();
     }
  }
  
- 
-
-//// delay(200);
-//  read temeprature sensor to get the breath time from nose 
-// breathe in low temp  ,exchale : high temp , 
-// get timing aftr few second transpose in a minute
 
 }
