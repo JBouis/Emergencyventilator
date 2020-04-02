@@ -1,3 +1,13 @@
+/*
+ * No copyright
+ * Just use it
+ * Jonathan Bouis
+ * 
+ * Note : This code is a "template" only
+ * This is on a fully fonctionning code 
+ * hoping peoples can use some part of the code 
+ * to create their own fonctionning Emergency ventilator
+ */
 // Include Libraries
 #include "Arduino.h"
 #include "Buzzer.h"
@@ -77,9 +87,9 @@ void blink() {
 }
 
 //read button state.
-bool Button_read( int m_pin)
+bool Button_read( )
 {
-  return digitalRead(m_pin);
+  return digitalRead(ACCEPT_BUTTON);
 
 }
 
@@ -115,18 +125,41 @@ float Pressure_Sensor(){
 
 
 int readPotentiometer() {
-
-   BPM_POT_value=  BPM_POT.getValue();
-   BPM_POT_value= map(BPM_POT_value,0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
+   static int temp_BPM_POT_value;
+   static int temp_Tidal_POT_value;
+   static int temp_I_E_POT_value;
+   static int temp_Threshold_POT_value;
+   static int temp_Angle_POT_value;
+// TO DO 
+// use temp  values intead , use has to press button to validate the change
+// value to the global data for safety mesure 
+// need to add the value change on LCD to
+   temp_BPM_POT_value=  BPM_POT.getValue();
+   temp_BPM_POT_value= map(temp_BPM_POT_value,0,1023,0,60) ; // from 10 bit adc range to 0:60 BPM
    
-   Tidal_POT_value = Tidal_POT.getValue();
-   Tidal_POT_value = map( Tidal_POT_value,0,1023,0,100); // tidla value form 0% to 100%
+   temp_Tidal_POT_value = Tidal_POT.getValue();
+   temp_Tidal_POT_value = map( temp_Tidal_POT_value,0,1023,0,100); // tidla value form 0% to 100%
     
-   I_E_POT_value = I_E_POT.getValue();
-   I_E_POT_value = map(I_E_POT_value,0,1023,2,4); // I_E ratio from 1/2 to 1/4
+   temp_I_E_POT_value = I_E_POT.getValue();
+   temp_I_E_POT_value = map(temp_I_E_POT_value,0,1023,2,4); // I_E ratio from 1/2 to 1/4
    
-   Threshold_POT_value = Threshold_POT.getValue();
-   Angle_POT_value =  Angle_POT.getValue();
+   temp_Threshold_POT_value = Threshold_POT.getValue();
+   temp_Threshold_POT_value = map( temp_Threshold_POT_value,0,1023,0,100); // plateau thresold value
+   
+   temp_Angle_POT_value =  Angle_POT.getValue();
+   temp_Angle_POT_value = map( temp_Angle_POT_value,0,1023,0,180); // angle of servo desired.
+
+   if (Button_read()!= 1)
+   {
+     BPM_POT_value = temp_BPM_POT_value;
+     Tidal_POT_value = temp_Tidal_POT_value;
+     I_E_POT_value = temp_I_E_POT_value ;
+     Threshold_POT_value = temp_Threshold_POT_value;
+     Angle_POT_value = temp_Angle_POT_value;
+     
+     
+   }
+  
 
 
    return 0 ;
@@ -161,9 +194,9 @@ void setup() {
   pinMode(LEDRGB_PIN_DIN,OUTPUT); // set led -pin 12 as an output
   
   Servo1.attach(SERVO_1_SIG,DEG_0,DEG_180);  // attaches the servo on pin 9 to the servo object degree from 0 to 180
-  Servo1.writeMicroseconds(1500);  // set servo to mid-point
+  Servo1.writeMicroseconds(1000);  // set servo to starting point
   Servo2.attach(SERVO_2_SIG,DEG_0,DEG_180);  // attaches the servo on pin 10 to the servo object degree from 0 to 180
-  Servo2.writeMicroseconds(1500);  // set servo to mid-point
+  Servo2.writeMicroseconds(1000);  // set servo to starting point
 // interrupt for pressure sensor 
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING ); // interupt for pressure sensor 
@@ -171,40 +204,121 @@ void setup() {
 }
 
 
-
+// TO DO timer process doesn't work at all at the moment , 
+// just a concepct to get the idea
 void loop() {
- 
+float PERIOD_T ;
+ unsigned long cycle_breathe_threshold;
  unsigned long time_T;
  int ret; 
+ int current_pos_servo_1 = Servo1.read();
+ int current_pos_servo_2 = Servo2.read();
+ 
 //if (MANUAL_MODE == TRUE ) {
-//// read potentiometers and update values
- ret =readPotentiometer();
-//
-//// read pressure sensor in a regular interval
-//
-//// 
-// read_pressure_Sensors();
-//}
-//
-//// 
-//// start cycle breath cycle 
-//
+ if ( (current_pos_servo_1 != DEG_0) || (current_pos_servo_2 !=DEG_0))
+ {
+   while(Button_read()!=1)
+    {
+      BUZZER();
+      BLINK_LED();
+    }
+ }
+ else
+ {
+  current_state = INHALE;
+ }   
  time_T = millis();
- current_state = INHALE;
+ 
 //// breath
-//if ((breath == TRUE )  {
-//     current_angle == pot_angle ;
-//  if (angle != TRUE) {
-//        digitalWrite(Buzzer, HIGH);       
-//   }
-//     else {
-//            digitalWrite(Buzzer, LOW);
-//           }
-//   Mode servo 1 and 2 in the specify angle 
-//}
-//
-//   exhale process
-//
+ if ( current_state == INHALE)
+ {
+   PERIOD_T = 60000 / BPM_POT_value ;
+   cycle_breathe_threshold = PERIOD_T / ( 1 +I_E_POT_value)  ; // 60 sec divided by BPM and ratio
+   unsigned long cycle_breathe = 0.0 ;
+   Servo1.write(Angle_POT_value); 
+   Servo2.write(Angle_POT_value); 
+
+   do{
+       // read pressudre 
+       // read pot
+       ret =readPotentiometer();
+       cycle_breathe = millis();
+   } while ( cycle_breathe <= (time_T - cycle_breathe_threshold) );
+
+   current_state = PLATEAU;
+ }
+ else
+ {  
+ 
+    while(Button_read()!=1)
+    {
+      BUZZER();
+      BLINK_LED();
+    }
+ }
+// plateau state
+ if ( current_state == PLATEAU)
+ {
+     unsigned long cycle_plateau_threshold  = 150;
+     unsigned long cycle_plateau = 0.0;
+     do
+     {
+       ret =readPotentiometer();
+       cycle_plateau = millis();
+  
+       current_pos_servo_1 = Servo1.read();
+       current_pos_servo_2 = Servo2.read();
+
+       if ( (current_pos_servo_1 != Angle_POT_value) || (current_pos_servo_2 !=Angle_POT_value))
+       {
+         while(Button_read()!=1)
+          {
+            BUZZER();
+            BLINK_LED();
+          }
+       }        
+     } while ( cycle_plateau <= cycle_plateau_threshold);
+
+     current_state = EXHALE;
+ }
+  else
+ {  
+ 
+    while(Button_read()!=1)
+    {
+      BUZZER();
+      BLINK_LED();
+    }
+ }
+// exhale state
+ if ( current_state==EXHALE)
+ {
+   unsigned long cycle_exhale_threshold = PERIOD_T -  cycle_breathe_threshold  ; // 60 sec divided by BPM and ratio
+   unsigned long cycle_exhale = 0.0 ;
+   Servo1.write(DEG_0); 
+   Servo2.write(DEG_0); 
+
+   do{
+       // read pressudre 
+       // read pot
+       ret =readPotentiometer();
+       cycle_exhale = millis();
+    } while ( cycle_exhale <= (time_T - cycle_exhale_threshold) );
+
+   
+ }
+ else
+ {  
+ 
+    while(Button_read()!=1)
+    {
+      BUZZER();
+      BLINK_LED();
+    }
+ }
+ 
+ 
+
 //// delay(200);
 //  read temeprature sensor to get the breath time from nose 
 // breathe in low temp  ,exchale : high temp , 
