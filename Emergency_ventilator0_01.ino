@@ -158,11 +158,7 @@ bool Get_mode(){
  */
 int Temp_Sensor(){
   
-   static int temp_val  ;
-   
-   temp_val = analogRead(TEMPERATURE_SENSOR) * 5 / 1024.0 * 100 -50 ;
-  
-   return temp_val ;
+   return (analogRead(TEMPERATURE_SENSOR) * 5 / 1024.0 * 100 -50) ;
 }
 
 
@@ -176,11 +172,7 @@ int Temp_Sensor(){
 
 int Pressure_Sensor(){
   
-  static int temp_pressure ;
-  
-  temp_pressure =map( analogRead(PRESSURE_SENSOR),0,1023,0,120);  // value in kPa
- 
-  return temp_pressure;
+  return (map( analogRead(PRESSURE_SENSOR),0,1023,0,120));
 }
 
 int readPotentiometer() {
