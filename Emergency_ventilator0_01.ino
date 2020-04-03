@@ -66,6 +66,12 @@ int I_E_POT_value = 0;  // variable to store the value coming from the potentiom
 int Threshold_POT_value = 0;  // variable to store the value coming from the potentiometer Threshold_POT
 int Angle_POT_value = 0;  // variable to store the value coming from the potentiometer Angle_POT
 
+// saved variable if we are not in the specific phase
+int saved_BPM_POT_value;
+int saved_Tidal_POT_value;
+int saved_I_E_POT_value;
+bool saving_flag = false ;
+
 unsigned long startTime;  //
 unsigned long currentTime;
 
@@ -93,6 +99,7 @@ int potpin = 0;  // analog pin used to connect the potentiometer
 int val;    // variable to read the value from the analog pin
 
 enum state{
+  WAITING,
   INHALE,
   PLATEAU,
   EXHALE
@@ -149,9 +156,9 @@ bool Get_mode(){
  * temp = ADCval * AREF / 1024.0 * 100 - 50
  * here AREF is 5V
  */
-float Temp_Sensor(){
+int Temp_Sensor(){
   
-   static float temp_val  ;
+   static int temp_val  ;
    
    temp_val = analogRead(TEMPERATURE_SENSOR) * 5 / 1024.0 * 100 -50 ;
   
@@ -167,9 +174,9 @@ float Temp_Sensor(){
     from the datasheet range is from 0 kPa to 12kPa
  */
 
-float Pressure_Sensor(){
+int Pressure_Sensor(){
   
-  static float temp_pressure ;
+  static int temp_pressure ;
   
   temp_pressure =map( analogRead(PRESSURE_SENSOR),0,1023,0,120);  // value in kPa
  
@@ -196,15 +203,33 @@ int readPotentiometer() {
 
    if (Button_read()!= true)
    {
-     BPM_POT_value = temp_BPM_POT_value;
-     Tidal_POT_value = temp_Tidal_POT_value;
-     I_E_POT_value = temp_I_E_POT_value ;
+     if( (current_state ==INHALE)|| (current_state== WAITING)){
+       BPM_POT_value = temp_BPM_POT_value;
+       Tidal_POT_value = temp_Tidal_POT_value;
+       I_E_POT_value = temp_I_E_POT_value ;
+     }
+     else{
+        saved_BPM_POT_value = temp_BPM_POT_value;
+        saved_Tidal_POT_value = temp_Tidal_POT_value;
+        saved_I_E_POT_value = temp_I_E_POT_value ;
+        saving_flag = true ;
+      
+      }  
+     
      Threshold_POT_value = temp_Threshold_POT_value;
      Angle_POT_value = temp_Angle_POT_value;
           
    }
   
    return 0 ;
+  
+}
+
+void Saved_Pot(){
+       BPM_POT_value = saved_BPM_POT_value;
+       Tidal_POT_value = saved_Tidal_POT_value;
+       I_E_POT_value = saved_I_E_POT_value ;
+       saving_flag = false; 
   
 }
 
@@ -328,7 +353,7 @@ void loop() {
 // plateau state
  if ( current_state == PLATEAU)
  {
-     unsigned long cycle_plateau_threshold  = 150;
+     unsigned long cycle_plateau_threshold  = 150; // has to be 0.15sec 
      unsigned long cycle_plateau = 0.0;
      do
      {
@@ -388,6 +413,11 @@ void loop() {
  else
  {  
       BUZZER_AND_LED_ALARM();
+ }
+ 
+ current_state= WAITING;
+ if ( saving_flag== true){
+  Saved_Pot();
  }
  #ifdef watchdog
 #ifdef watchdogProtect        
