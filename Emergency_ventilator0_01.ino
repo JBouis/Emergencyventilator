@@ -7,14 +7,34 @@
  * This is on a fully fonctionning code 
  * hoping peoples can use some part of the code 
  * to create their own fonctionning Emergency ventilator
+ *  Breathing cycle phase 
+ *   - Setup
+ *   Cycle :
+     - Inhale phase
+     - Plateau phase
+     - Exhale phase
+ *    
+ *   more info on : https://e-vent.mit.edu/
  */
 // Include Libraries
 #include "Arduino.h"
+#include <avr/wdt.h>
 #include <Servo.h>
 
 
+// # define watchdog       // DO not enable while debuging
+
+#ifdef  watchdog
+#define watchdogProtect          // This prevents the watchdog from being fired before watchdogDelay  
+                                 // To allow an new software to be uploaded     
+#define watchdogDelay      1000  // Maximum time before the watchdog times out and resets 
+#define watchdogStartDelay 8000  // Delay before the watchdog becomes active (used to have the time
+                                 // to reload the program if it hangs the controller. Only for development.
+#endif
+
+
 // Pin Definitions
-#define BUZZER_PIN_SIG  4
+#define BUZZER_AND_LED_ALARM_PIN_SIG  4
 
 #define LEDRGB_PIN_DIN  3
 
@@ -34,9 +54,10 @@
 #define PRESSURE_SENSOR A6
 
 // servo motor variable 
-#define DEG_0 544
-#define DEG_180 2400
+#define DEG_0  0 //  or 544ms  depends of the servo motor you use
+#define DEG_180 180 // 2400ms  
 
+#define Pressure_Max 20  // 2kPa
 // potentiometer variable 
 
 int BPM_POT_value = 0;  // variable to store the value coming from the potentiometer BPM_POT 
@@ -53,7 +74,9 @@ const byte ledPin = 6;
 const byte interruptPin = 3;
 volatile byte state = LOW;
 //
-
+#ifdef  watchdog
+bool watchdog_start
+#endif
 //******************************************
 // variable for auto or manual mode
 // Variables will change:
@@ -77,10 +100,11 @@ enum state{
 
 enum state current_state ;
 
+void (* resetFunction)(void) = 0;  // Self reset (to be used with watchdog)
 
 void blink() {
   state = !state;
-  // ccall buzzer too? 
+  // ccall BUZZER_AND_LED_ALARM too? 
 }
 
 //read button state.
@@ -89,7 +113,6 @@ bool Button_read( )
   return digitalRead(ACCEPT_BUTTON);
 
 }
-
 
 /*
  * To do  
@@ -127,11 +150,12 @@ bool Get_mode(){
  * here AREF is 5V
  */
 float Temp_Sensor(){
-  static float temp_val  ;
+  
+   static float temp_val  ;
+   
    temp_val = analogRead(TEMPERATURE_SENSOR) * 5 / 1024.0 * 100 -50 ;
   
-
-  return temp_val ;
+   return temp_val ;
 }
 
 
@@ -177,8 +201,7 @@ int readPotentiometer() {
      I_E_POT_value = temp_I_E_POT_value ;
      Threshold_POT_value = temp_Threshold_POT_value;
      Angle_POT_value = temp_Angle_POT_value;
-     
-     
+          
    }
   
    return 0 ;
@@ -190,26 +213,43 @@ int readPotentiometer() {
  */
 void BLINK_LED(void){
 
+ while(Button_read()!= true){
   digitalWrite(LEDRGB_PIN_DIN, HIGH);
   delay(1000);   
-  digitalWrite(LEDRGB_PIN_DIN, HIGH);
+  digitalWrite(LEDRGB_PIN_DIN, LOW);
   delay(1000);
+ }
 }
 
 /*
- * ring buzzer for a sec at the moment
+ * ring BUZZER_AND_LED_ALARM for a sec at the moment
  */
-void BUZZER (void){
-  
-  tone(BUZZER_PIN_SIG, 1000); // Send 1KHz sound signal...
+ 
+void BUZZER_AND_LED_ALARM (void){
+
+  while(Button_read()!= true){
+  tone(BUZZER_AND_LED_ALARM_PIN_SIG, 1000); // Send 1KHz sound signal...
+  digitalWrite(LEDRGB_PIN_DIN, HIGH);
   delay(1000);        // ...for 1 sec
-  noTone(BUZZER_PIN_SIG);     // Stop sound...
+  noTone(BUZZER_AND_LED_ALARM_PIN_SIG);     // Stop sound...
+  digitalWrite(LEDRGB_PIN_DIN, LOW);
   delay(1000);        // ...for 1sec
+  }
 }
+
+
+/*
+ * add an interrupt system while BUZZER_AND_LED_ALARM and led are on
+ */
+//void handler()
+//{
+//  interrupted = true;
+//}
+
 
 void setup() {
 
-  pinMode(BUZZER_PIN_SIG, OUTPUT);   // Set buzzer - pin 4 as an output
+  pinMode(BUZZER_AND_LED_ALARM_PIN_SIG, OUTPUT);   // Set BUZZER_AND_LED_ALARM - pin 4 as an output
   pinMode(LEDRGB_PIN_DIN,OUTPUT); // set led -pin 12 as an output
   
   pinMode(ACCEPT_BUTTON,INPUT);
@@ -245,11 +285,7 @@ void loop() {
 //if (MANUAL_MODE == TRUE ) {
  if ( (current_pos_servo_1 != DEG_0) || (current_pos_servo_2 !=DEG_0))
  {
-   while(Button_read()!=true)
-    {
-      BUZZER();
-      BLINK_LED();
-    }
+      BUZZER_AND_LED_ALARM();  
  }
  else
  {
@@ -272,19 +308,23 @@ void loop() {
        ret = readPotentiometer();
        ret = Pressure_Sensor();
        cycle_breathe = millis();
-   } while ( ((cycle_breathe - time_T) <= (cycle_breathe_threshold))|| (ret >=2) ); // 2 is for max pressure sensor  max is 1.9kPA
-
-   current_state = PLATEAU;
+   } while ( ((cycle_breathe - time_T) <= (cycle_breathe_threshold))|| (ret >=Pressure_Max) ); // 2 is for max pressure sensor  max is 1.9kPA
+   if (ret >=Pressure_Max)
+    {
+      Servo1.write(DEG_0); 
+      Servo2.write(DEG_0); 
+      BUZZER_AND_LED_ALARM();
+      current_state = INHALE;
+    }
+    else{
+      current_state = PLATEAU;
+    }  
  }
  else
  {  
- 
-    while(Button_read()!=true)
-    {
-      BUZZER();
-      BLINK_LED();
-    }
+      BUZZER_AND_LED_ALARM();
  }
+ 
 // plateau state
  if ( current_state == PLATEAU)
  {
@@ -293,6 +333,7 @@ void loop() {
      do
      {
        ret =readPotentiometer();
+       ret = Pressure_Sensor();
        cycle_plateau = millis();
   
        current_pos_servo_1 = Servo1.read();
@@ -302,23 +343,26 @@ void loop() {
        {
          while(Button_read()!=true)
           {
-            BUZZER();
-            BLINK_LED();
+            BUZZER_AND_LED_ALARM();
           }
        }        
-     } while ( cycle_plateau <= cycle_plateau_threshold);
-
-     current_state = EXHALE;
+     } while ( (cycle_plateau <= cycle_plateau_threshold)||(ret >=Pressure_Max));
+     if (ret >=Pressure_Max)
+     {
+       Servo1.write(DEG_0); 
+       Servo2.write(DEG_0); 
+       BUZZER_AND_LED_ALARM();
+       current_state = INHALE;
+     }
+     else{
+       current_state = EXHALE;
+     }
  }
   else
  {  
- 
-    while(Button_read()!=true)
-    {
-      BUZZER();
-      BLINK_LED();
-    }
+      BUZZER_AND_LED_ALARM();
  }
+ 
 // exhale state
  if ( current_state==EXHALE)
  {
@@ -332,19 +376,28 @@ void loop() {
        // read pot
        ret =readPotentiometer();
        cycle_exhale = millis();
-    } while ( cycle_exhale <= (time_T - cycle_exhale_threshold) );
-
+    } while (( cycle_exhale <= (time_T - cycle_exhale_threshold) )||(ret >=Pressure_Max));
+    if (ret >=Pressure_Max)
+    {
+      Servo1.write(DEG_0); 
+      Servo2.write(DEG_0); 
+      BUZZER_AND_LED_ALARM();
+    }
    
  }
  else
  {  
- 
-    while(Button_read()!=true)
-    {
-      BUZZER();
-      BLINK_LED();
-    }
+      BUZZER_AND_LED_ALARM();
  }
- 
+ #ifdef watchdog
+#ifdef watchdogProtect        
+ if (!watchdogStarted && (millis()>watchdogStartDelay))       // True when the watchdog has been activated. the first few seconds after reset are without watchdog protection
+  {
+   Watchdog.enable(watchdogDelay);
+   watchdogStarted=true; 
+  }
+#endif        
+ Watchdog.reset();
+#endif        
 
 }
